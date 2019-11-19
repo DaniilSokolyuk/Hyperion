@@ -47,7 +47,8 @@ namespace Hyperion.Tests.Generator
                 ULong = ulong.MaxValue,
                 UShort = ushort.MaxValue,
                 Boolean = true,
-                Type = typeof(int)
+                Type = typeof(int),
+                SomeLinkedList = new LinkedList<IDictionary<Type, string>>(new IDictionary<Type, string>[] { new Dictionary<Type, string> { [typeof(int)] = "123"}  })
             };
         }
     }

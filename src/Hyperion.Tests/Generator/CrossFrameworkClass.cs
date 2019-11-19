@@ -43,6 +43,8 @@ namespace Hyperion.Tests.Generator
 
         public Type Type { get; set; }
 
+        public LinkedList<IDictionary<Type, string>> SomeLinkedList { get; set; }
+
         public override bool Equals(object obj)
         {
             if (!(obj is CrossFrameworkClass))

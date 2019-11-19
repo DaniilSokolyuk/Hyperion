@@ -13,6 +13,8 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Runtime.CompilerServices;
+using System.Text;
 using System.Text.RegularExpressions;
 
 namespace Hyperion.Extensions
@@ -67,7 +69,7 @@ namespace Hyperion.Extensions
         }
 
 #if NETSTANDARD16
-    //HACK: the GetUnitializedObject actually exists in .NET Core, its just not public
+        //HACK: the GetUnitializedObject actually exists in .NET Core, its just not public
         private static readonly Func<Type, object> getUninitializedObjectDelegate = (Func<Type, object>)
             typeof(string)
                 .GetTypeInfo()
@@ -118,21 +120,8 @@ namespace Hyperion.Extensions
             return TypeNameLookup.GetOrAdd(byteArr, b =>
             {
                 var shortName = StringEx.FromUtf8Bytes(b.Bytes, 0, b.Bytes.Length);
-#if NET45
-                if (shortName.Contains("System.Private.CoreLib,%core%"))
-                {
-                    shortName = shortName.Replace("System.Private.CoreLib,%core%", "mscorlib,%core%");
-                }
-#endif
-#if NETSTANDARD
-                if (shortName.Contains("mscorlib,%core%"))
-                {
-                    shortName = shortName.Replace("mscorlib,%core%", "System.Private.CoreLib,%core%");
-                }
-#endif
-
-                var typename = ToQualifiedAssemblyName(shortName);
-                return Type.GetType(typename, true);
+                var type = LoadType(shortName);
+                return type;
             });
         }
         public static Type GetTypeFromManifestFull(Stream stream, DeserializerSession session)
@@ -159,7 +148,6 @@ namespace Hyperion.Extensions
 
         public static Type GetTypeFromManifestIndex(int typeId, DeserializerSession session)
         {
-
             var type = session.GetTypeFromTypeId(typeId);
             return type;
         }
@@ -191,17 +179,17 @@ namespace Hyperion.Extensions
             if (type == Int16Type)
                 return sizeof(short);
             if (type == Int32Type)
-                return sizeof (int);
+                return sizeof(int);
             if (type == Int64Type)
-                return sizeof (long);
+                return sizeof(long);
             if (type == BoolType)
-                return sizeof (bool);
+                return sizeof(bool);
             if (type == UInt16Type)
-                return sizeof (ushort);
+                return sizeof(ushort);
             if (type == UInt32Type)
-                return sizeof (uint);
+                return sizeof(uint);
             if (type == UInt64Type)
-                return sizeof (ulong);
+                return sizeof(ulong);
             if (type == CharType)
                 return sizeof(char);
 
@@ -210,10 +198,17 @@ namespace Hyperion.Extensions
         private static readonly string CoreAssemblyQualifiedName = 1.GetType().AssemblyQualifiedName;
         private static readonly string CoreAssemblyName = GetCoreAssemblyName();
 
-        private static readonly Regex cleanAssemblyVersionRegex = new Regex(
-            "(, Version=([\\d\\.]+))?(, Culture=[^,\\] \\t]+)?(, PublicKeyToken=(null|[\\da-f]+))?",
-            RegexOptions.Compiled | RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
+        private static readonly bool IsMscorlib = typeof(int).AssemblyQualifiedName.Contains("mscorlib");
 
+        internal static readonly Regex AssemblyNameVersionSelectorRegex =
+            new Regex(@", Version=\d+.\d+.\d+.\d+, Culture=[\w-]+, PublicKeyToken=(?:null|[a-f0-9]{16})$", RegexOptions.Compiled);
+
+        internal static HashSet<Assembly> _frameworkAssemblies = new HashSet<Assembly>
+        {
+			typeof(Uri).GetTypeInfo().Assembly, // System.dll
+			typeof(Enumerable).GetTypeInfo().Assembly, // System.Core.dll
+		};
+        
         private static string GetCoreAssemblyName()
         {
             var part = CoreAssemblyQualifiedName.Substring(CoreAssemblyQualifiedName.IndexOf(", Version", StringComparison.Ordinal));
@@ -222,16 +217,94 @@ namespace Hyperion.Extensions
 
         public static string GetShortAssemblyQualifiedName(this Type self)
         {
-            var name = self.AssemblyQualifiedName;
-            name = name.Replace(CoreAssemblyName, ",%core%");
-            name = cleanAssemblyVersionRegex.Replace(name, string.Empty);
-            return name;
+            var builder = new StringBuilder();
+            SerializeType(self, true, builder);
+
+            return builder.ToString();
         }
 
-        public static string ToQualifiedAssemblyName(string shortName)
+        public static Type LoadType(string str)
         {
-            var res = shortName.Replace(",%core%", CoreAssemblyName);
-            return res;
+            return Type.GetType(str, throwOnError: true);
+        }
+
+        private static readonly AssemblyName MscorlibAssemblyName = new AssemblyName("mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089");
+
+
+        private static void SerializeType(Type type, bool withAssemblyName, StringBuilder typeNameBuilder)
+        {
+            if (type == typeof(System.Console))
+            {
+                typeNameBuilder.Append("System.Console, mscorlib");
+                return;
+            }
+
+            //if (type == typeof(System.Threading.Thread))
+            //{
+            //    typeNameBuilder.Append("System.Threading.Thread, mscorlib");
+            //    return;
+            //}
+
+            if (type.DeclaringType != null)
+            {
+                SerializeType(type.DeclaringType, false, typeNameBuilder);
+                typeNameBuilder.Append('+');
+            }
+            else if (type.Namespace != null)
+            {
+                typeNameBuilder.Append(type.Namespace).Append('.');
+            }
+
+            typeNameBuilder.Append(type.Name);
+
+            if (type.GenericTypeArguments.Length > 0)
+            {
+                SerializeTypes(type.GenericTypeArguments, typeNameBuilder);
+            }
+
+            if (!withAssemblyName) return;
+
+            var typeInfo = type.GetTypeInfo();
+
+            if (type != typeof(object) && type != typeof(string) && !typeInfo.IsPrimitive)
+            {
+                string assemblyName;
+
+                var typeForwardedFrom = typeInfo.GetCustomAttribute<TypeForwardedFromAttribute>();
+                if (typeForwardedFrom != null)
+                {
+                    assemblyName = typeForwardedFrom.AssemblyFullName;
+                }
+                else
+                {
+                    assemblyName = typeInfo.Assembly.GetName().FullName;
+                }
+
+                if (assemblyName.StartsWith("System.Private.CoreLib", StringComparison.OrdinalIgnoreCase))
+                {
+                    assemblyName = "mscorlib";
+                }
+
+                typeNameBuilder.Append(", ").Append(assemblyName);
+            }
+        }
+
+        private static void SerializeTypes(Type[] types, StringBuilder typeNamesBuilder)
+        {
+            if (types == null) return;
+
+            typeNamesBuilder.Append('[');
+
+            for (var i = 0; i < types.Length; i++)
+            {
+                typeNamesBuilder.Append('[');
+                SerializeType(types[i], true, typeNamesBuilder);
+                typeNamesBuilder.Append(']');
+
+                if (i != types.Length - 1) typeNamesBuilder.Append(',');
+            }
+
+            typeNamesBuilder.Append(']');
         }
 
         /// <summary>
