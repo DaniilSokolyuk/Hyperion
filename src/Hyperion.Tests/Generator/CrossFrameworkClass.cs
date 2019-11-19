@@ -40,6 +40,8 @@ namespace Hyperion.Tests.Generator
 
         public CrossFrameworkStruct Struct { get; set; }
 
+        public Type TypeInt { get; set; }
+
         public override bool Equals(object obj)
         {
             if (!(obj is CrossFrameworkClass))
@@ -95,6 +97,7 @@ namespace Hyperion.Tests.Generator
                 hashCode = (hashCode * 397) ^ (Exception != null ? Exception.GetHashCode() : 0);
                 hashCode = (hashCode * 397) ^ (int) Enum;
                 hashCode = (hashCode * 397) ^ Struct.GetHashCode();
+                hashCode = (hashCode * 397) ^ TypeInt.GetHashCode();
                 return hashCode;
             }
         }
@@ -117,9 +120,10 @@ namespace Hyperion.Tests.Generator
                    && string.Equals(String, other.String)
                    && DateTime.Equals(other.DateTime)
                    // && Equals(Exception, other.Exception) 
-                   && Exception.Message == other.Exception.Message 
+                   && Exception.Message == other.Exception.Message
                    && Enum == other.Enum
-                   && Struct.Equals(other.Struct);
+                   && Struct.Equals(other.Struct)
+                   && TypeInt == other.TypeInt;
         }
     }
 }

@@ -42,7 +42,8 @@ namespace Hyperion.Tests.Generator
                 UInt = uint.MaxValue,
                 ULong = ulong.MaxValue,
                 UShort = ushort.MaxValue,
-                Boolean = true
+                Boolean = true,
+                TypeInt = typeof(int)
             };
         }
     }
