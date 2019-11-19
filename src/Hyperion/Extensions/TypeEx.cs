@@ -195,25 +195,6 @@ namespace Hyperion.Extensions
 
             throw new NotSupportedException();
         }
-        private static readonly string CoreAssemblyQualifiedName = 1.GetType().AssemblyQualifiedName;
-        private static readonly string CoreAssemblyName = GetCoreAssemblyName();
-
-        private static readonly bool IsMscorlib = typeof(int).AssemblyQualifiedName.Contains("mscorlib");
-
-        internal static readonly Regex AssemblyNameVersionSelectorRegex =
-            new Regex(@", Version=\d+.\d+.\d+.\d+, Culture=[\w-]+, PublicKeyToken=(?:null|[a-f0-9]{16})$", RegexOptions.Compiled);
-
-        internal static HashSet<Assembly> _frameworkAssemblies = new HashSet<Assembly>
-        {
-			typeof(Uri).GetTypeInfo().Assembly, // System.dll
-			typeof(Enumerable).GetTypeInfo().Assembly, // System.Core.dll
-		};
-        
-        private static string GetCoreAssemblyName()
-        {
-            var part = CoreAssemblyQualifiedName.Substring(CoreAssemblyQualifiedName.IndexOf(", Version", StringComparison.Ordinal));
-            return part;
-        }
 
         public static string GetShortAssemblyQualifiedName(this Type self)
         {
@@ -227,9 +208,6 @@ namespace Hyperion.Extensions
         {
             return Type.GetType(str, throwOnError: true);
         }
-
-        private static readonly AssemblyName MscorlibAssemblyName = new AssemblyName("mscorlib, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089");
-
 
         private static void SerializeType(Type type, bool withAssemblyName, StringBuilder typeNameBuilder)
         {
@@ -268,24 +246,31 @@ namespace Hyperion.Extensions
 
             if (type != typeof(object) && type != typeof(string) && !typeInfo.IsPrimitive)
             {
-                string assemblyName;
+                string assemblyName = null;
 
                 var typeForwardedFrom = typeInfo.GetCustomAttribute<TypeForwardedFromAttribute>();
                 if (typeForwardedFrom != null)
                 {
                     assemblyName = typeForwardedFrom.AssemblyFullName;
                 }
+                else if (type.GenericTypeArguments.Length == 0 && Type.GetType(typeInfo.FullName, false) != null)
+                {
+                    assemblyName = null;
+                }
                 else
                 {
                     assemblyName = typeInfo.Assembly.GetName().FullName;
                 }
 
-                if (assemblyName.StartsWith("System.Private.CoreLib", StringComparison.OrdinalIgnoreCase))
+                if (assemblyName != null && assemblyName.StartsWith("System.Private.CoreLib", StringComparison.OrdinalIgnoreCase))
                 {
                     assemblyName = "mscorlib";
                 }
 
-                typeNameBuilder.Append(", ").Append(assemblyName);
+                if (assemblyName != null)
+                {
+                    typeNameBuilder.Append(", ").Append(assemblyName);
+                }
             }
         }
 
