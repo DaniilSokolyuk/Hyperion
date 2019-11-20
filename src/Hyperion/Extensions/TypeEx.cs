@@ -201,6 +201,8 @@ namespace Hyperion.Extensions
             var builder = new StringBuilder();
             SerializeType(self, true, builder);
 
+            var name = builder.ToString();
+
             return builder.ToString();
         }
 
@@ -211,18 +213,6 @@ namespace Hyperion.Extensions
 
         private static void SerializeType(Type type, bool withAssemblyName, StringBuilder typeNameBuilder)
         {
-            if (type == typeof(System.Console))
-            {
-                typeNameBuilder.Append("System.Console, mscorlib");
-                return;
-            }
-
-            //if (type == typeof(System.Threading.Thread))
-            //{
-            //    typeNameBuilder.Append("System.Threading.Thread, mscorlib");
-            //    return;
-            //}
-
             if (type.DeclaringType != null)
             {
                 SerializeType(type.DeclaringType, false, typeNameBuilder);
@@ -288,6 +278,7 @@ namespace Hyperion.Extensions
 
                 if (i != types.Length - 1) typeNamesBuilder.Append(',');
             }
+
 
             typeNamesBuilder.Append(']');
         }
